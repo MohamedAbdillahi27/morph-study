@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MORPH — Experience how things work</title>
+  <meta name="description" content="Explore black holes, DNA replication, and neural networks through interactive visual models.">
+  <meta name="theme-color" content="#F7F6F2">
+  <link rel="canonical" href="https://morph.study/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="MORPH">
+  <meta property="og:title" content="MORPH — Experience how things work">
+  <meta property="og:description" content="Launch a photon, unzip a double helix, or send a signal through a neural network.">
+  <meta property="og:url" content="https://morph.study/">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='9' fill='%238b3030'/%3E%3Cg fill='none' stroke='%23fff' stroke-width='1.8'%3E%3Cellipse cx='24' cy='24' rx='17' ry='7' transform='rotate(45 24 24)'/%3E%3Cellipse cx='24' cy='24' rx='17' ry='7' transform='rotate(-45 24 24)'/%3E%3C/g%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+  <script defer src="audio.js"></script>
+  <script defer src="exp-blackhole.js"></script>
+  <script defer src="exp-dna.js"></script>
+  <script defer src="exp-neural.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="MORPH home">
+      <svg aria-hidden="true" viewBox="0 0 38 38" fill="none" stroke="currentColor" stroke-width="1.45">
+        <ellipse cx="19" cy="19" rx="17" ry="7" transform="rotate(45 19 19)"/>
+        <ellipse cx="19" cy="19" rx="17" ry="7" transform="rotate(-45 19 19)"/>
+      </svg>
+      <span>MORPH</span>
+    </a>
+    <span id="topic-label" class="topic-label" hidden></span>
+    <div class="top-actions">
+      <a id="browse-link" href="#explore">Explore exhibits</a>
+      <button id="share" type="button" hidden>Share link</button>
+      <button id="sound" type="button" aria-pressed="false" hidden>Sound off</button>
+    </div>
+  </header>
+
+  <main id="main" tabindex="-1">
+    <div id="home">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <div class="eyebrow"><span></span> An interactive field guide</div>
+          <h1 id="hero-title">Experience how<br>things <em>work.</em></h1>
+          <p>Follow your curiosity into the invisible forces, living systems, and ideas that shape our world.</p>
+          <form id="search-form" role="search" autocomplete="off">
+            <div class="search-pill">
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg>
+              <label class="sr-only" for="search">Search exhibits</label>
+              <input id="search" type="search" role="combobox" aria-autocomplete="list" aria-controls="results" aria-expanded="false" placeholder="What do you want to know?">
+              <kbd aria-hidden="true">/</kbd>
+            </div>
+            <ul id="results" role="listbox" aria-label="Matching exhibits" hidden></ul>
+            <span id="search-status" class="sr-only" role="status"></span>
+          </form>
+          <nav class="chips" aria-label="Suggested exhibits">
+            <a href="#black-hole">Black Hole</a>
+            <a href="#dna">DNA Replication</a>
+            <a href="#neural-networks">Neural Networks</a>
+          </nav>
+        </div>
+        <figure class="hero-figure">
+          <canvas id="hero-art" aria-hidden="true"></canvas>
+          <figcaption><span>GRAVITATIONAL FIELD</span><a href="#black-hole">Explore Black Hole <span aria-hidden="true">↗</span></a></figcaption>
+        </figure>
+      </section>
+      <section class="collection" id="explore" aria-labelledby="collection-title">
+        <div class="section-head">
+          <div class="eyebrow"><span></span> The collection</div>
+          <h2 id="collection-title">Choose a world to explore.</h2>
+        </div>
+        <div id="collection-cards" class="card-grid"></div>
+      </section>
+      <footer class="footer"><span>MORPH</span><p>Experience how things work.</p><span>morph.study</span></footer>
+    </div>
+    <article id="exhibit" hidden aria-labelledby="exhibit-title">
+      <header class="exhibit-intro">
+        <div class="eyebrow" id="exhibit-category"></div>
+        <h1 id="exhibit-title" tabindex="-1"></h1>
+        <p id="exhibit-intro"></p>
+      </header>
+      <div class="story-layout">
+        <section id="stage" class="stage" aria-label="Interactive model">
+          <div class="stage-header"><span id="model-label"></span><span id="stage-counter" aria-hidden="true"></span></div>
+          <div class="model"><canvas id="model-canvas" aria-describedby="model-hint"></canvas><div id="model-tooltip" class="model-tooltip" hidden></div></div>
+          <p id="model-hint" class="model-hint"></p>
+          <div id="controls" class="controls"></div>
+        </section>
+        <div id="chapters" class="chapters"></div>
+      </div>
+      <section class="collection related" aria-labelledby="related-title">
+        <h2 id="related-title">Continue exploring</h2>
+        <div id="related-cards" class="card-grid"></div>
+      </section>
+      <footer class="footer"><a href="#">MORPH</a><span>morph.study</span></footer>
+    </article>
+  </main>
+  <div class="toast" id="toast" role="status" hidden></div>
+  <dialog id="share-dialog" aria-labelledby="share-title">
+    <form method="dialog"><h2 id="share-title">Share this exhibit</h2><label for="share-url">Exhibit link</label><input id="share-url" readonly><button>Close</button></form>
+  </dialog>
+  <noscript><p class="noscript">Enable JavaScript to explore the interactive exhibits.</p></noscript>
+</body>
+</html>
