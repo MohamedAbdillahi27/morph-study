@@ -29,6 +29,16 @@ window.MorphAudio = (() => {
     else stopBlackHole();
   }
 
+  function whenReady(play) {
+    if (!enabled || !context) return;
+    if (context.state === 'running') play();
+    else if (context.state === 'suspended') {
+      context.resume().then(() => {
+        if (enabled && context.state === 'running') play();
+      }).catch(() => {});
+    }
+  }
+
   function tone(frequency, duration, volume, offset = 0) {
     const now = context.currentTime + offset;
     const oscillator = context.createOscillator();
@@ -98,6 +108,20 @@ window.MorphAudio = (() => {
   return {
     get enabled() { return enabled; },
     setEnabled, playSelect, playBlackHoleTone, stopBlackHole,
+    playFusion() {
+      whenReady(() => {
+        playSelect();
+        tone(196, 0.52, 0.035, 0.12);
+        tone(294, 0.38, 0.055, 0.48);
+        tone(440, 0.27, 0.03, 0.64);
+      });
+    },
+    playInspect() {
+      whenReady(() => {
+        tone(480, 0.13, 0.042);
+        tone(720, 0.18, 0.021, 0.045);
+      });
+    },
     playDnaBond() {
       if (!enabled || context?.state !== 'running') return;
       tone(880, 0.19, 0.058);

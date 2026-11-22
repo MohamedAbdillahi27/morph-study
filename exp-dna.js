@@ -144,8 +144,9 @@ window.MorphDna = (() => {
       }
       hit[index] = { a, b, newA, newB, built, separated };
     }
-    if (!thumbnail && progress > 0.25 && progress < 0.55) {
-      const x = padding + span * opening;
+    const helicase = { x: padding + span * opening, y: mid, visible: progress > 0.25 && progress < 0.55 };
+    if (!thumbnail && helicase.visible) {
+      const { x } = helicase;
       ctx.fillStyle = '#85c7af';
       ctx.strokeStyle = '#174d55';
       ctx.lineWidth = 1.5;
@@ -162,17 +163,18 @@ window.MorphDna = (() => {
       ctx.textBaseline = 'bottom';
       ctx.fillText('HELICASE', x, mid - 15);
     }
-    if (!thumbnail && progress > 0.55 && progress < 0.85) {
-      const pair = pairs[Math.round(synthesis * (pairs.length - 1))];
+    const activePair = pairs[Math.round(synthesis * (pairs.length - 1))];
+    const polymerase = { upper: activePair.newA, lower: activePair.newB, visible: progress > 0.55 && progress < 0.85 };
+    if (!thumbnail && polymerase.visible) {
       ctx.strokeStyle = '#174d55';
       ctx.lineWidth = 1.6;
-      for (const point of [pair.newA, pair.newB]) {
+      for (const point of [polymerase.upper, polymerase.lower]) {
         ctx.beginPath();
         ctx.ellipse(point.x, point.y, 11, 8, 0, 0, Math.PI * 2);
         ctx.stroke();
       }
     }
-    return hit;
+    return { hit, helicase, polymerase };
   }
 
   function segmentDistance(x, y, a, b) {
@@ -187,8 +189,7 @@ window.MorphDna = (() => {
     let progress = 0;
     let playing = false;
     let time = 0;
-    let selected = -1;
-    let hit = [];
+    let resume = false;
     let previousBond = 0;
     let fromScroll = true;
     let scrub;
@@ -196,65 +197,107 @@ window.MorphDna = (() => {
 
     function updatePlay(value) {
       playing = value;
-      play.textContent = playing ? 'Pause' : 'Play';
+      play.textContent = playing ? 'Pause' : resume ? 'Resume playthrough' :
+        target >= 1 ? 'Replay replication' : 'Watch Replication Playthrough';
       play.setAttribute('aria-pressed', String(playing));
     }
 
-    const play = ui.button('Play', () => {
+    const play = ui.button('Watch Replication Playthrough', () => {
       if (playing) {
+        resume = true;
         updatePlay(false);
         return;
       }
-      if (target >= 1) target = progress = 0;
+      ui.reset();
+      if (!resume) target = progress = 0;
+      resume = false;
       fromScroll = false;
       updatePlay(true);
     });
     play.setAttribute('aria-pressed', 'false');
     scrub = ui.range('Replication scrub', 0, 100, 1, 0, value => Math.round(value) + '%', value => {
       fromScroll = false;
-      updatePlay(false);
+      resume = false;
       target = value / 100;
-    });
-    const inspect = ui.select('Inspect a base pair', [
-      ['-1', 'Inspect a base pair'],
-      ...Array.from(SEQUENCE, (base, index) => [String(index), (index + 1) + ' · ' + base + '–' + COMPLEMENT[base]])
-    ], value => {
-      selected = Number(value);
-      ui.tip(selected >= 0 ? pairLabel(selected) : '');
+      updatePlay(false);
     });
     const current = ui.readout('Replication stage');
     ui.row(scrub.element);
-    ui.compact(play, inspect);
+    ui.primary(play);
     ui.readouts(current);
 
-    function inspectAt(event) {
-      if (!hit.length) return;
-      const { x, y } = ui.point(event);
-      let closest = 15;
-      let match = -1;
-      hit.forEach((pair, index) => {
-        const proximity = pair.separated < 0.5
-          ? segmentDistance(x, y, pair.a, pair.b)
-          : Math.min(segmentDistance(x, y, pair.a, pair.built ? pair.newA : pair.a),
-            segmentDistance(x, y, pair.b, pair.built ? pair.newB : pair.b));
-        if (proximity < closest) {
-          closest = proximity;
-          match = index;
-        }
-      });
-      selected = match;
-      ui.tip(match >= 0 ? pairLabel(match) : '');
+    function inspectEnzyme(at, min, max) {
+      const alreadyVisible = progress > min && progress < max;
+      if (alreadyVisible && !playing) return;
+      fromScroll = false;
+      resume = false;
+      target = alreadyVisible ? progress : at;
+      updatePlay(false);
     }
-    ui.on(ui.canvas, 'pointermove', inspectAt);
-    ui.on(ui.canvas, 'click', inspectAt);
-    ui.on(ui.canvas, 'pointerleave', () => {
-      selected = Number(inspect.value);
-      ui.tip(selected >= 0 ? pairLabel(selected) : '');
-    });
+
+    function anatomy({ hit, helicase, polymerase }) {
+      const middle = hit[Math.floor(hit.length / 2)];
+      const backbone = {
+        id: 'backbone', title: 'Sugar–phosphate backbone', x: middle.a.x, y: middle.a.y, zoom: 2.6, focusAt: true,
+        description: 'Alternating sugars and phosphates form the outer rail of each strand. Strong covalent bonds keep each rail intact when helicase separates the weaker base-pair connections.',
+        hit(px, py) {
+          let closest = Infinity;
+          for (let i = 1; i < hit.length; i++) {
+            const a = hit[i - 1];
+            const b = hit[i];
+            const distance = Math.min(segmentDistance(px, py, a.a, b.a), segmentDistance(px, py, a.b, b.b),
+              b.built > 0.5 ? segmentDistance(px, py, a.newA, b.newA) : Infinity,
+              b.built > 0.5 ? segmentDistance(px, py, a.newB, b.newB) : Infinity);
+            if (distance < closest) closest = distance;
+          }
+          return closest <= 9 ? closest / 9 + 0.38 : Infinity;
+        }
+      };
+      ui.parts([
+        backbone,
+        {
+          id: 'helicase', title: 'Helicase enzyme', ...helicase, zoom: 2.35,
+          description: 'Helicase uses energy from ATP to separate the two template strands. It disrupts the hydrogen bonds between bases as it moves forward, leaving exposed bases for the copying machinery.',
+          hit: helicase.visible ? ui.circle(helicase.x, helicase.y, 16) : null,
+          onPick() { inspectEnzyme(0.4, 0.28, 0.52); }
+        },
+        {
+          id: 'polymerase', title: 'DNA polymerase', x: polymerase.upper.x, y: polymerase.upper.y, zoom: 2.55, focusAt: true,
+          description: 'DNA polymerase adds a complementary nucleotide to the growing strand’s 3′ end. Each correct pairing provides the next letter of the DNA copy.',
+          hit(px, py) {
+            const distance = Math.min(Math.hypot(px - polymerase.upper.x, py - polymerase.upper.y),
+              Math.hypot(px - polymerase.lower.x, py - polymerase.lower.y));
+            return polymerase.visible && distance <= 11 ? distance / 13 : Infinity;
+          },
+          onPick() { inspectEnzyme(0.7, 0.58, 0.82); }
+        },
+        ...hit.map((pair, index) => {
+          const a = pair.a;
+          const b = pair.separated < 0.5 ? pair.b : pair.built > 0.15 ? pair.newA : pair.a;
+          const base = SEQUENCE[index];
+          const complement = COMPLEMENT[base];
+          const count = base === 'A' || base === 'T' ? 2 : 3;
+          return {
+            id: 'pair-' + index, title: base + '–' + complement + ' base pair', option: 'Pair ' + (index + 1) + ' · ' + base + '–' + complement,
+            tip: pairLabel(index), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, zoom: 3.1, focusAt: true,
+            description: NAME[base] + ' pairs with ' + NAME[complement].toLowerCase() +
+              ' through ' + count + ' hydrogen bonds. This preference lets each exposed base guide which nucleotide is added to the new strand.',
+            hit(px, py) {
+              if (helicase.visible && Math.hypot(px - helicase.x, py - helicase.y) < 13) return Infinity;
+              const other = pair.separated >= 0.5 ? segmentDistance(px, py, pair.b, pair.built > 0.15 ? pair.newB : pair.b) : Infinity;
+              const distance = Math.min(segmentDistance(px, py, a, b), other);
+              return distance <= 8 ? distance / 8 : Infinity;
+            }
+          };
+        })
+      ]);
+    }
 
     return {
       onScroll() {
+        if (playing) return;
         fromScroll = true;
+        resume = false;
         updatePlay(false);
       },
       frame(dt, scroll) {
@@ -273,8 +316,10 @@ window.MorphDna = (() => {
         if (bond > previousBond) MorphAudio.playDnaBond();
         previousBond = bond;
         if (!ui.reduced()) time += dt;
-        const { ctx, width, height } = ui.size();
-        hit = render(ctx, width, height, { progress, time, selected });
+        ui.draw((ctx, width, height) => {
+          const selected = ui.selected().startsWith('pair-') ? Number(ui.selected().slice(5)) : -1;
+          anatomy(render(ctx, width, height, { progress, time, selected }));
+        });
       }
     };
   }

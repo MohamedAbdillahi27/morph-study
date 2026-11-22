@@ -33,8 +33,9 @@ window.MorphNeural = (() => {
     const radius = Math.max(12, Math.min(w * 0.047, h * 0.088, 25));
     const columns = [0.16, 0.5, 0.84];
     const counts = [3, 4, 2];
+    const margin = Math.min(0.38, Math.max(0.18, 47 / h));
     const nodes = columns.flatMap((x, layer) => Array.from({ length: counts[layer] }, (_, index) => ({
-      x: w * x, y: h * (0.18 + (index + 0.5) / counts[layer] * 0.78), layer
+      x: w * x, y: h * (margin + (index + 0.5) / counts[layer] * (0.96 - margin)), layer
     })));
     const edges = WEIGHTS.flatMap((weights, from) => weights.map((_, to) => ({
       from, to: from < 3 ? to + 3 : to + 7, column: to, layer: from < 3 ? 0 : 1
@@ -43,7 +44,7 @@ window.MorphNeural = (() => {
   }
 
   function render(ctx, w, h, { inputs = INPUTS, weights = WEIGHTS, data = calculate(inputs, weights),
-    pulse = Infinity, stage = -1, selected = -1, thumbnail = false } = {}) {
+    pulse = Infinity, stage = -1, selected = -1, selectedNode = -1, thumbnail = false } = {}) {
     const graph = geometry(w, h);
     const { radius, nodes, edges } = graph;
     ctx.fillStyle = '#0a0e17';
@@ -76,7 +77,7 @@ window.MorphNeural = (() => {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = layer === stage ? CYAN : '#9aafc4';
-        ctx.fillText(label, w * [0.16, 0.5, 0.84][layer], h * 0.095, w * 0.30);
+        ctx.fillText(label, w * [0.16, 0.5, 0.84][layer], Math.max(29, h * 0.095), w * 0.30);
       });
     }
 
@@ -110,7 +111,7 @@ window.MorphNeural = (() => {
         ctx.shadowColor = GOLD;
         ctx.shadowBlur = 13;
         ctx.beginPath();
-        ctx.arc(a.x + (b.x - a.x) * travel, a.y + (b.y - a.y) * travel, 1.4 + magnitude * 2.2, 0, Math.PI * 2);
+        ctx.arc(a.x + (b.x - a.x) * travel, a.y + (b.y - a.y) * travel, 2 + magnitude * 2.7, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
       }
@@ -118,7 +119,7 @@ window.MorphNeural = (() => {
     });
 
     nodes.forEach((node, index) => {
-      const active = stage === node.layer;
+      const active = stage === node.layer || selectedNode === index;
       ctx.beginPath();
       ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
       ctx.fillStyle = active ? '#133043' : '#142033';
@@ -145,8 +146,7 @@ window.MorphNeural = (() => {
     let data = calculate(inputs, weights);
     let selected = 0;
     let pulse = Infinity;
-    let drag = null;
-    let graph;
+    let wave = 0;
     const edges = geometry(1, 1).edges;
     let preset;
     const inputControls = inputs.map((value, index) =>
@@ -172,7 +172,7 @@ window.MorphNeural = (() => {
       weights[edge.from][edge.column] = value;
       fire();
     });
-    const fireButton = ui.button('Fire signal pulse', fire);
+    const fireButton = ui.button('Fire signal pulse', () => fire());
     ui.compact(preset, fireButton);
     ui.row(edgeSelect, weightControl.element);
 
@@ -191,8 +191,10 @@ window.MorphNeural = (() => {
       }
       const term = index => '(' + weights[index][0].toFixed(1) + ' × ' + inputs[index].toFixed(2) + ')';
       ui.equation(0, 'z₁ = ' + [0, 1, 2].map(term).join(' + ') + ' − 0.08 = ' + data.hiddenSums[0].toFixed(2));
-      ui.equation(1, 'h₁ = ReLU(' + data.hiddenSums[0].toFixed(2) + ') = ' + data.hidden[0].toFixed(2));
-      ui.equation(2, 'softmax([' + data.logits.map(value => value.toFixed(2)).join(', ') + ']) = [' +
+      ui.equation(1, names[edges[selected].from] + ' → ' + names[edges[selected].to] + ' · w = ' +
+        weights[edges[selected].from][edges[selected].column].toFixed(1));
+      ui.equation(2, 'h₁ = ReLU(' + data.hiddenSums[0].toFixed(2) + ') = ' + data.hidden[0].toFixed(2) +
+        ' · softmax([' + data.logits.map(value => value.toFixed(2)).join(', ') + ']) = [' +
         data.probabilities.map(value => value.toFixed(2)).join(', ') + ']');
     }
 
@@ -205,60 +207,82 @@ window.MorphNeural = (() => {
       fire();
     }
 
-    ui.on(ui.canvas, 'pointerdown', event => {
-      if (!graph || event.button !== 0 || drag) return;
-      const { x, y } = ui.point(event);
-      const node = graph.nodes.slice(0, 3).findIndex(point => Math.hypot(point.x - x, point.y - y) <= graph.radius + 6);
-      if (node >= 0) {
-        drag = { node, y, start: inputs[node], pointer: event.pointerId, moved: false };
-        ui.canvas.setPointerCapture(event.pointerId);
-        return;
-      }
+    function anatomy({ nodes, radius }) {
+      const nodeParts = nodes.map(({ x, y, layer }, index) => {
+        const name = names[index];
+        const key = 'node-' + index;
+        const hit = ui.circle(x, y, radius + 5);
+        if (layer === 0) {
+          return {
+            id: key, title: 'Input ' + name, x, y, zoom: 2.4, hit,
+            description: 'An input node holds a value between 0 and 1. Its signal reaches each hidden neuron through a separate weighted connection. Change this value to see how the downstream activations respond.',
+            value: name + ' = ' + inputs[index].toFixed(2),
+            control: inputControls[index].element,
+            drag() {
+              const start = inputs[index];
+              return offset => editInput(index, start + offset / 115);
+            }
+          };
+        }
+        const source = layer === 1 ? 0 : 3 + data.hidden.indexOf(Math.max(...data.hidden));
+        const incoming = edges.findIndex(edge => edge.from === source && edge.to === index);
+        const localIndex = layer === 1 ? index - 3 : index - 7;
+        return {
+          id: key, title: (layer === 1 ? 'Hidden neuron ' : 'Output node ') + name, x, y, zoom: 2.4, hit,
+          description: layer === 1
+            ? 'This neuron adds its weighted inputs and bias, then applies ReLU. A negative sum produces zero. Adjust the incoming connection from ' + names[source] + ' to see the result change.'
+            : 'This node combines the hidden activations into a logit. Softmax compares both logits to determine this output’s probability. Adjust the incoming connection from ' + names[source] + ' to change the score.',
+          value: layer === 1
+            ? 'ReLU(' + data.hiddenSums[localIndex].toFixed(2) + ') = ' + data.hidden[localIndex].toFixed(2)
+            : 'Logit ' + data.logits[localIndex].toFixed(2) + ' · ' + (100 * data.probabilities[localIndex]).toFixed(1) + '% probability',
+          control: weightControl.element,
+          onPick() { choose(incoming); fire(false); }
+        };
+      });
 
-      let closest = 9;
-      let match = -1;
-      graph.edges.forEach((edge, index) => {
-        const a = graph.nodes[edge.from];
-        const b = graph.nodes[edge.to];
+      const wireParts = edges.map((edge, index) => {
+        const a = nodes[edge.from];
+        const b = nodes[edge.to];
         const dx = b.x - a.x;
         const dy = b.y - a.y;
-        const along = ((x - a.x) * dx + (y - a.y) * dy) / (dx * dx + dy * dy);
-        if (along < 0.13 || along > 0.87) return;
-        const distance = Math.hypot(x - a.x - along * dx, y - a.y - along * dy);
-        if (distance < closest) {
-          match = index;
-          closest = distance;
-        }
+        const name = names[edge.from] + ' → ' + names[edge.to];
+        const weight = weights[edge.from][edge.column];
+        const signal = edge.layer === 0 ? inputs[edge.from] : data.hidden[edge.from - 3];
+        return {
+          id: 'wire-' + index, title: 'Weight ' + name, x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, zoom: 2.45, focusAt: true,
+          description: 'This connection multiplies the source’s activation by its weight. Positive weights add to the destination’s sum. Negative weights subtract from it. Set the weight to zero to remove its contribution.',
+          value: signal.toFixed(2) + ' × ' + weight.toFixed(1) + ' = ' + (signal * weight).toFixed(2),
+          control: weightControl.element,
+          onPick() { choose(index); fire(false); },
+          hit(px, py) {
+            if (Math.hypot(px - a.x, py - a.y) <= radius + 5 || Math.hypot(px - b.x, py - b.y) <= radius + 5) return Infinity;
+            const along = ((px - a.x) * dx + (py - a.y) * dy) / (dx * dx + dy * dy || 1);
+            if (along < 0.09 || along > 0.91) return Infinity;
+            const distance = Math.hypot(px - a.x - along * dx, py - a.y - along * dy);
+            return distance <= 7 ? 0.7 + distance / 7 : Infinity;
+          }
+        };
       });
-      if (match < 0) return;
-      const edge = edges[match];
-      const current = weights[edge.from][edge.column];
-      weights[edge.from][edge.column] = current >= 1 ? -1 : Math.min(1, Math.round((current + 0.5) * 10) / 10);
-      choose(match);
-      fire();
-    });
-    ui.on(ui.canvas, 'pointermove', event => {
-      if (!drag || drag.pointer !== event.pointerId) return;
-      const { y } = ui.point(event);
-      if (Math.abs(drag.y - y) > 3) drag.moved = true;
-      if (drag.moved) editInput(drag.node, drag.start + (drag.y - y) / 115);
-    });
-    ui.on(ui.canvas, 'pointerup', event => {
-      if (!drag || drag.pointer !== event.pointerId) return;
-      if (!drag.moved) editInput(drag.node, drag.start >= 0.99 ? 0 : drag.start + 0.25);
-      drag = null;
-    });
-    ui.on(ui.canvas, 'lostpointercapture', () => { drag = null; });
+      ui.parts([...nodeParts, ...wireParts]);
+    }
     fire(false);
 
     return {
-      frame(dt, _progress, stage) {
+      onScroll() { pulse = Infinity; },
+      frame(dt, progress, stage) {
         if (Number.isFinite(pulse)) {
           pulse += dt;
           if (pulse > 2.2) pulse = Infinity;
         }
-        const { ctx, width, height } = ui.size();
-        graph = render(ctx, width, height, { inputs, weights, data, pulse, stage, selected });
+        wave = ui.ease(wave, progress, dt);
+        const scrollPulse = wave > 0.002 && wave < 0.998 ? wave * 2.1 : Infinity;
+        const part = ui.selected();
+        const selectedNode = part.startsWith('node-') ? Number(part.slice(5)) : -1;
+        ui.draw((ctx, width, height) => {
+          anatomy(render(ctx, width, height, {
+            inputs, weights, data, pulse: Number.isFinite(pulse) ? pulse : scrollPulse, stage, selected, selectedNode
+          }));
+        });
       }
     };
   }

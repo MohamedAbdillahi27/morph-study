@@ -15,10 +15,12 @@ window.MorphBlackHole = (() => {
   const stars = Array.from({ length: 650 }, () => ({
     x: random(), y: random(), size: random() ** 4, tint: random(), depth: random()
   }));
-  const dust = Array.from({ length: 1650 }, () => ({
-    angle: random() * TAU, orbit: 1.16 + random() ** 1.45 * 2.85,
-    glow: 0.16 + random() * 0.75, size: random(), height: (random() - 0.5) * 0.19
-  }));
+  const dust = Array.from({ length: 1650 }, () => {
+    const angle = random() * TAU;
+    const orbit = 1.16 + random() ** 1.45 * 2.85;
+    return { angle, orbit, speed: 0.63 / orbit ** 1.5,
+      glow: 0.16 + random() * 0.75, size: random(), height: (random() - 0.5) * 0.19 };
+  });
 
   function line(ctx, x, y, endX, endY) {
     ctx.beginPath();
@@ -29,7 +31,7 @@ window.MorphBlackHole = (() => {
 
   function render(ctx, w, h, { time = 0, progress = 0, mass = 18, distance = 8, poster = false, photons = [] } = {}) {
     const x = w * (poster ? 0.53 : 0.5);
-    const y = h * (poster ? 0.47 : 0.51);
+    const y = h * (poster ? 0.47 : 0.5);
     const short = Math.min(w, h);
     const radius = short * (poster ? 0.157 : 0.105 + progress * 0.052 + (mass - 5) * 0.00095 + (20 - distance) * 0.001);
     const sky = ctx.createRadialGradient(x, y, 0, x, y, Math.max(w, h) * 0.68);
@@ -74,23 +76,34 @@ window.MorphBlackHole = (() => {
     }
 
     function disk(front) {
-      ctx.globalCompositeOperation = 'screen';
+      const paths = new Map();
       for (const grain of dust) {
-        const phase = grain.angle + time * 0.63 / grain.orbit ** 1.5;
+        const phase = grain.angle + time * grain.speed;
         const depth = Math.sin(phase);
         if ((depth > 0) !== front) continue;
-        const px = Math.cos(phase) * grain.orbit * radius;
-        const py = depth * grain.orbit * radius * 0.31 + grain.height * radius;
-        const beam = 0.39 + 0.61 * (1 - Math.cos(phase)) / 2;
+        const across = Math.cos(phase);
+        const orbit = grain.orbit * radius;
+        const offset = grain.height * radius;
+        const beam = 0.39 + 0.61 * (1 - across) / 2;
         const alpha = grain.glow * beam * (1.16 - grain.orbit * 0.17);
-        const red = 244;
-        const green = Math.round(79 + beam * 125);
-        const blue = Math.round(24 + beam * 98);
-        ctx.strokeStyle = 'rgba(' + red + ',' + green + ',' + blue + ',' + alpha + ')';
-        ctx.lineWidth = 0.45 + grain.size * 1.35;
-        const trail = 0.028 + grain.size * 0.1;
-        line(ctx, px, py, Math.cos(phase + trail) * grain.orbit * radius,
-          Math.sin(phase + trail) * grain.orbit * radius * 0.31 + grain.height * radius);
+        const tint = Math.min(5, Math.floor(beam * 6));
+        const brightness = Math.ceil(alpha * 7);
+        const thickness = grain.size > 0.5 ? 1 : 0;
+        const key = (tint * 8 + brightness) * 2 + thickness;
+        let batch = paths.get(key);
+        if (!batch) {
+          batch = { path: new Path2D(), tint, brightness, thickness };
+          paths.set(key, batch);
+        }
+        const trail = phase + 0.028 + grain.size * 0.1;
+        batch.path.moveTo(across * orbit, depth * orbit * 0.31 + offset);
+        batch.path.lineTo(Math.cos(trail) * orbit, Math.sin(trail) * orbit * 0.31 + offset);
+      }
+      ctx.globalCompositeOperation = 'screen';
+      for (const { path, tint, brightness, thickness } of paths.values()) {
+        ctx.strokeStyle = 'rgba(244,' + (90 + tint * 21) + ',' + (33 + tint * 16) + ',' + brightness / 7 + ')';
+        ctx.lineWidth = thickness ? 1.45 : 0.72;
+        ctx.stroke(path);
       }
       ctx.globalCompositeOperation = 'source-over';
     }
@@ -188,10 +201,52 @@ window.MorphBlackHole = (() => {
       MorphAudio.playSelect();
     }
 
-    ui.on(ui.canvas, 'click', event => {
-      const { x, y } = ui.point(event);
-      emit(x, y);
-    });
+    const rotation = -0.22;
+    const cos = Math.cos(rotation);
+    const sin = Math.sin(rotation);
+
+    function anatomy() {
+      const { x, y, radius } = geometry;
+      function projected(px, py) {
+        const dx = (px - x) / radius;
+        const dy = (py - y) / radius;
+        return { across: dx * cos + dy * sin, down: -dx * sin + dy * cos };
+      }
+      function radial(px, py) {
+        const { across, down } = projected(px, py);
+        return Math.hypot(across, down / 0.96);
+      }
+
+      ui.parts([
+        {
+          id: 'horizon', title: 'Event horizon and singularity', x, y, zoom: 2.38,
+          tip: 'Event horizon / shadow',
+          description: 'The event horizon is the boundary beyond which signals cannot escape. In classical general relativity, continued collapse leads to a singularity inside. The dark patch you see is the apparent shadow shaped by bent light.',
+          value: 'Horizon radius · ' + (SOLAR_RADIUS_KM * currentMass).toFixed(1) + ' km',
+          hit(px, py) { return radial(px, py) < 0.9 ? 0.25 : Infinity; }
+        },
+        {
+          id: 'photon-sphere', title: 'Photon sphere', x: x + radius * 0.61, y: y - radius * 0.78, zoom: 2.8,
+          tip: 'Photon ring / sphere',
+          description: 'At 1.5 times the Schwarzschild radius, light can follow an unstable circular orbit around a non-rotating black hole. Light passing near these orbits can loop around the black hole before escaping, contributing to its bright apparent ring.',
+          value: 'Photon-sphere radius · ' + (1.5 * SOLAR_RADIUS_KM * currentMass).toFixed(1) + ' km',
+          hit(px, py) {
+            const error = Math.abs(radial(px, py) - 1);
+            return error <= Math.max(0.12, 5 / radius) ? error : Infinity;
+          }
+        },
+        {
+          id: 'accretion-disk', title: 'Accretion disk', focusAt: true, x: x - radius * 1.85 * cos,
+          y: y - radius * 1.85 * sin + radius * 0.25, zoom: 2.35,
+          description: 'Orbiting gas heats up as it loses orbital energy and spirals inward. Relativistic Doppler beaming makes approaching material appear brighter. The disk emits the light you see around the dark shadow.',
+          hit(px, py) {
+            const { across, down } = projected(px, py);
+            const orbit = Math.hypot(across, down / 0.34);
+            return radial(px, py) > 1.07 && orbit >= 1.15 && orbit <= 4.04 ? 0.5 : Infinity;
+          }
+        }
+      ]);
+    }
 
     return {
       frame(dt, progress) {
@@ -223,9 +278,11 @@ window.MorphBlackHole = (() => {
           MorphAudio.playBlackHoleTone((progress + (20 - currentDistance) / 18.5) / 2);
           lastAudio = elapsed;
         }
-        const { ctx, width, height } = ui.size();
-        geometry = render(ctx, width, height, {
-          time: ui.reduced() ? 0 : elapsed, progress, mass: currentMass, distance: currentDistance, photons
+        ui.draw((ctx, width, height) => {
+          geometry = render(ctx, width, height, {
+            time: ui.reduced() ? 0 : elapsed, progress, mass: currentMass, distance: currentDistance, photons
+          });
+          anatomy();
         });
       },
       dispose: MorphAudio.stopBlackHole

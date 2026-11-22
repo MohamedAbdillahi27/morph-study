@@ -42,9 +42,18 @@
     <div id="home">
       <section class="hero" aria-labelledby="hero-title">
         <div class="hero-copy">
-          <div class="eyebrow"><span></span> An interactive field guide</div>
-          <h1 id="hero-title">Experience how<br>things <em>work.</em></h1>
-          <p>Follow your curiosity into the invisible forces, living systems, and ideas that shape our world.</p>
+          <div class="hero-title">
+            <svg aria-hidden="true" viewBox="0 0 100 100" fill="none">
+              <g stroke="currentColor" stroke-width="1.15">
+                <ellipse cx="50" cy="50" rx="46" ry="18" transform="rotate(45 50 50)"/>
+                <ellipse cx="50" cy="50" rx="46" ry="18" transform="rotate(-45 50 50)"/>
+                <circle cx="50" cy="50" r="46" stroke-dasharray="1 5" opacity=".35"/>
+              </g>
+              <circle cx="50" cy="50" r="3" fill="currentColor"/>
+            </svg>
+            <h1 id="hero-title">MORPH<span>.</span></h1>
+          </div>
+          <p class="hero-tagline">Experience how things work.</p>
           <form id="search-form" role="search" autocomplete="off">
             <div class="search-pill">
               <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg>
@@ -61,10 +70,7 @@
             <a href="#neural-networks">Neural Networks</a>
           </nav>
         </div>
-        <figure class="hero-figure">
-          <canvas id="hero-art" aria-hidden="true"></canvas>
-          <figcaption><span>GRAVITATIONAL FIELD</span><a href="#black-hole">Explore Black Hole <span aria-hidden="true">↗</span></a></figcaption>
-        </figure>
+        <div class="hero-orbits" aria-hidden="true"></div>
       </section>
       <section class="collection" id="explore" aria-labelledby="collection-title">
         <div class="section-head">
@@ -76,17 +82,37 @@
       <footer class="footer"><span>MORPH</span><p>Experience how things work.</p><span>morph.study</span></footer>
     </div>
     <article id="exhibit" hidden aria-labelledby="exhibit-title">
-      <header class="exhibit-intro">
-        <div class="eyebrow" id="exhibit-category"></div>
-        <h1 id="exhibit-title" tabindex="-1"></h1>
-        <p id="exhibit-intro"></p>
-      </header>
+      <h1 id="exhibit-title" class="sr-only" tabindex="-1"></h1>
       <div class="story-layout">
         <section id="stage" class="stage" aria-label="Interactive model">
-          <div class="stage-header"><span id="model-label"></span><span id="stage-counter" aria-hidden="true"></span></div>
-          <div class="model"><canvas id="model-canvas" aria-describedby="model-hint"></canvas><div id="model-tooltip" class="model-tooltip" hidden></div></div>
-          <p id="model-hint" class="model-hint"></p>
-          <div id="controls" class="controls"></div>
+          <div class="mobile-context" aria-hidden="true"><span id="mobile-category"></span><strong id="mobile-title"></strong></div>
+          <div class="model">
+            <div class="stage-header"><span id="model-label"></span><span id="stage-counter" aria-hidden="true"></span></div>
+            <canvas id="model-canvas" aria-describedby="model-hint"></canvas>
+            <div id="model-tooltip" class="model-tooltip" hidden></div>
+          </div>
+          <div class="stage-dock">
+            <p id="model-hint" class="model-hint"></p>
+            <div class="model-actions">
+              <label class="sr-only" for="inspect-part">Inspect a part</label>
+              <select id="inspect-part"><option value="">Inspect a part</option></select>
+              <button id="reset-view" type="button" hidden>Reset view</button>
+              <div id="primary-action"></div>
+              <button id="controls-toggle" type="button" aria-controls="controls" aria-expanded="false">Controls</button>
+            </div>
+            <div id="controls" class="controls" hidden></div>
+          </div>
+          <aside id="inspection" class="inspection" aria-labelledby="inspection-title" hidden>
+            <div class="inspection-head">
+              <span class="eyebrow">Anatomy</span>
+              <button id="inspection-close" type="button" aria-label="Reset view and close anatomy">Reset view</button>
+            </div>
+            <h2 id="inspection-title"></h2>
+            <p id="inspection-copy"></p>
+            <p id="inspection-value" class="equation-live"></p>
+            <div id="inspection-controls"></div>
+          </aside>
+          <div id="inspection-status" class="sr-only" role="status"></div>
         </section>
         <div id="chapters" class="chapters"></div>
       </div>
@@ -97,6 +123,7 @@
       <footer class="footer"><a href="#">MORPH</a><span>morph.study</span></footer>
     </article>
   </main>
+  <div id="fusion-seed" aria-hidden="true" hidden></div>
   <div class="toast" id="toast" role="status" hidden></div>
   <dialog id="share-dialog" aria-labelledby="share-title">
     <form method="dialog"><h2 id="share-title">Share this exhibit</h2><label for="share-url">Exhibit link</label><input id="share-url" readonly><button>Close</button></form>

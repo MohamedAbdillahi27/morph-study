@@ -7,7 +7,7 @@
       tags: 'Field / Spatial', label: 'Gravitational field',
       intro: 'Follow light around a collapsed star and see how gravity changes the paths it takes and the time a nearby observer experiences.',
       hook: 'What happens when gravity bends the path of light?',
-      hint: 'Tap the field to launch a photon. The paths illustrate bending and capture. The readouts use Schwarzschild physics.',
+      hint: 'Scroll to follow gravity. Select the shadow, ring, or disk to inspect it.',
       keywords: 'black hole,gravity,relativity,event horizon,space,singularity,light,photon,astronomy,astrophysics',
       exhibit: MorphBlackHole, poster: { poster: true, time: 2.85 },
       chapters: [
@@ -22,15 +22,15 @@
       tags: 'Anatomy / Process / Transformation', label: 'Replication fork',
       intro: 'Unzip a double helix and follow the pairing rules that let a cell copy its genetic information.',
       hook: 'How can a cell copy a molecule strand by strand?',
-      hint: 'Scroll, play, or scrub to move through replication. Hover or tap a rung to inspect its bases.',
+      hint: 'Scroll to unwind the helix. Select a rung, backbone, or helicase to inspect it.',
       keywords: 'dna,replication,genetics,helix,biology,genes,base pairs,adenine,cytosine,polymerase,helicase,nucleotides',
       exhibit: MorphDna, poster: { progress: 0.18, time: 2.3, thumbnail: true },
       scrollStops: [0, 0.4, 0.7, 1],
       chapters: [
-        ['Intact double helix', 'DNA has two sugar–phosphate backbones. Between them, adenine pairs with thymine through two hydrogen bonds, while cytosine pairs with guanine through three.', 'Inspect several rungs and count their bond dots.'],
+        ['Double helix structure', 'DNA has two sugar–phosphate backbones. Between them, adenine pairs with thymine through two hydrogen bonds, while cytosine pairs with guanine through three.', 'Inspect several rungs and count their bond dots.'],
         ['Helicase unzips', 'Helicase separates the paired strands by breaking the hydrogen bonds between bases. The backbones stay intact as the opening becomes a Y-shaped replication fork.', 'Scrub between 25% and 55% to follow the fork.'],
-        ['Polymerase adds bases', 'Each exposed strand serves as a template. DNA polymerase extends a new strand in the 5′ to 3′ direction. At a real fork, one new strand is made continuously and the other in short fragments. This model shows complementary pairing on both templates.', 'Watch which base joins each exposed nucleotide.'],
-        ['Two identical helices', 'Each copy contains one original strand and one newly built strand. This is called semiconservative replication. Dark teal marks the original backbones and green marks the new ones.', 'Drag the slider backward to see how each copy came together.']
+        ['Base pairing', 'Each exposed strand serves as a template. DNA polymerase extends a new strand in the 5′ to 3′ direction. At a real fork, one new strand is made continuously and the other in short fragments. This model shows complementary pairing on both templates.', 'Watch which base joins each exposed nucleotide.'],
+        ['Two identical copies', 'Each copy contains one original strand and one newly built strand. This is called semiconservative replication. Dark teal marks the original backbones and green marks the new ones.', 'Drag the slider backward to see how each copy came together.']
       ]
     },
     {
@@ -38,13 +38,13 @@
       tags: 'Network / Process', label: 'Feedforward network',
       intro: 'Send a signal through a small neural network and trace how inputs, weights, and activation functions shape a prediction.',
       hook: 'How do simple connected units turn signals into a prediction?',
-      hint: 'Tap or drag inputs. Tap a connection to cycle its weight, or edit it below. Cyan adds and coral subtracts.',
+      hint: 'Select a node or wire to inspect it. Scroll to follow the signal.',
       keywords: 'neural,ai,brain,deep learning,network,perceptron,weights,softmax,machine learning,relu',
       exhibit: MorphNeural, poster: { thumbnail: true },
       chapters: [
-        ['Weighted inputs', 'A neuron multiplies each incoming value by its connection weight, adds the products, and then adds a bias. A positive weight pushes the sum up. A negative weight pushes it down.', 'Change an input or a weight and watch the live calculation for the first hidden neuron.'],
-        ['Hidden layer and activation', 'Each hidden neuron applies ReLU to its sum. ReLU passes positive values through and turns negative values into zero. The four resulting activations are the inputs to the final layer.', 'Try making the first hidden neuron’s sum negative and watch its activation fall to zero.'],
-        ['Output probability', 'The two output neurons produce scores called logits. Softmax converts those scores into two probabilities that add to one. The gap between the scores determines how strongly the network favors one output.', 'Try the same input with a different weight and compare the output probabilities.']
+        ['Input signals', 'A neuron multiplies each incoming value by its connection weight, adds the products, and then adds a bias. A positive weight pushes the sum up. A negative weight pushes it down.', 'Change an input or a weight and watch the live calculation for the first hidden neuron.'],
+        ['Synaptic weights', 'Cyan connections carry positive weights. Coral connections carry negative weights. The magnitude of a weight determines how much that input changes the receiving neuron’s sum.', 'Select a connection and change its weight. A zero weight removes its contribution.'],
+        ['Activation and output', 'Hidden neurons apply ReLU to their sums, replacing negative results with zero. The two output neurons then produce logits. Softmax converts those scores into probabilities that add to one.', 'Try the same input with a different weight and compare the output probabilities.']
       ]
     }
   ];
@@ -73,6 +73,9 @@
   let timer;
   let matches = [];
   let selection = -1;
+  let fusion = null;
+  const modelWindow = stage.querySelector('.model');
+  const motionCurve = 'cubic-bezier(0.22, 1, 0.36, 1)';
 
   function element(tag, className, content) {
     const node = document.createElement(tag);
@@ -295,29 +298,223 @@
     const drawing = surface(canvas);
     const counter = byId('stage-counter');
     const tip = byId('model-tooltip');
+    const inspection = byId('inspection');
+    const inspector = byId('inspect-part');
+    const inspectionControls = byId('inspection-controls');
+    const reset = byId('reset-view');
+    const controlsToggle = byId('controls-toggle');
+    const panel = controls.parentElement;
+    const compactLayout = matchMedia('(max-width: 940px)');
     const chapterElements = topic.chapters.map(([heading, description, instruction], index) => {
       const section = element('section', 'chapter');
-      const inside = element('div', 'chapter-inner');
-      inside.append(element('div', 'chapter-index', 'Chapter ' + (index + 1) + ' / ' + topic.chapters.length),
-        element('h2', '', heading), element('p', '', description), element('p', 'try', instruction));
-      if (topic.model === 'neural') inside.append(element('p', 'equation-live'));
-      section.append(inside);
+      const slot = element('div', 'chapter-slot');
+      const text = element('div', 'chapter-inner');
+      if (index === 0) {
+        const lead = element('div', 'chapter-lead');
+        lead.append(element('div', 'chapter-category', topic.subject),
+          element('strong', 'chapter-topic', topic.title), element('p', 'chapter-description', topic.intro));
+        text.append(lead);
+      }
+      text.append(element('div', 'chapter-index', String(index + 1).padStart(2, '0') + ' / ' + String(topic.chapters.length).padStart(2, '0')),
+        element('h2', '', heading), element('p', 'chapter-description', description));
+      slot.append(text);
+
+      const action = element('div', 'chapter-slot chapter-action');
+      const actionText = element('div', 'chapter-inner');
+      actionText.append(element('h3', '', 'Try it'), element('p', 'try', instruction));
+      if (topic.model === 'neural') actionText.append(element('p', 'equation-live'));
+      action.append(actionText);
+      section.append(slot, action);
       return section;
     });
-    byId('chapters').replaceChildren(...chapterElements);
-    const equations = [...byId('chapters').querySelectorAll('.equation-live')];
+    const chapters = byId('chapters');
+    chapters.replaceChildren(...chapterElements);
+    const equations = [...chapters.querySelectorAll('.equation-live')];
+    const chapterSlots = [...chapters.querySelectorAll('.chapter-slot')];
     let activeChapter = -1;
+    let parts = [];
+    let optionsKey = '';
+    let selected = '';
+    let selectedOffset = null;
+    let pointer = null;
+    let drag = null;
+    let suppressClick = false;
+    let restoreControl = null;
+    const camera = { zoom: 1, x: 0, y: 0 };
+    let delta = 1 / 60;
+
+    function setControls(open) {
+      controls.hidden = !open;
+      panel.classList.toggle('has-controls', open);
+      controlsToggle.setAttribute('aria-expanded', String(open));
+    }
+
+    function inspect(part, point) {
+      restoreControl?.();
+      restoreControl = null;
+      selected = part?.id || '';
+      selectedOffset = part?.focusAt && point ? {
+        x: (point.x - camera.x) / camera.zoom - part.x,
+        y: (point.y - camera.y) / camera.zoom - part.y
+      } : null;
+      inspector.value = selected;
+      inspection.hidden = !part;
+      reset.hidden = !part;
+      stage.classList.toggle('has-inspection', Boolean(part));
+      canvas.classList.toggle('is-zoomed', Boolean(part));
+      if (!part) {
+        setText(byId('inspection-status'), 'Full model view');
+        return;
+      }
+      setControls(false);
+      part.onPick?.();
+      setText(byId('inspection-title'), part.title);
+      setText(byId('inspection-copy'), part.description);
+      setText(byId('inspection-value'), part.value || '');
+      setText(byId('inspection-status'), 'Inspecting ' + part.title);
+      if (part.control?.parentElement) {
+        const placeholder = document.createComment('Model control position');
+        part.control.before(placeholder);
+        inspectionControls.append(part.control);
+        restoreControl = () => placeholder.replaceWith(part.control);
+      }
+      MorphAudio.playInspect();
+    }
+
+    function localPoint(event) {
+      const rect = canvas.getBoundingClientRect();
+      return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    }
+
+    function screenHit(point) {
+      if (!point) return null;
+      const x = (point.x - camera.x) / camera.zoom;
+      const y = (point.y - camera.y) / camera.zoom;
+      let best = null;
+      let score = Infinity;
+      for (const part of parts) {
+        const distance = part.hit?.(x, y) ?? Infinity;
+        if (distance < score) {
+          score = distance;
+          best = part;
+        }
+      }
+      return best;
+    }
+
+    function resetWithFocus() {
+      inspect(null);
+      inspector.focus({ preventScroll: true });
+    }
+
+    on(inspector, 'change', () => inspect(parts.find(part => part.id === inspector.value)));
+    on(reset, 'click', resetWithFocus);
+    on(byId('inspection-close'), 'click', resetWithFocus);
+    on(controlsToggle, 'click', () => {
+      const open = controls.hidden;
+      if (open && selected) inspect(null);
+      setControls(open);
+    });
+    on(canvas, 'pointerdown', event => {
+      suppressClick = false;
+      if (event.button !== 0 || event.pointerType !== 'mouse') return;
+      const point = localPoint(event);
+      const part = screenHit(point);
+      if (part?.drag) drag = { pointerId: event.pointerId, y: point.y, update: part.drag() };
+    });
+    on(canvas, 'pointermove', event => {
+      pointer = localPoint(event);
+      if (drag?.pointerId !== event.pointerId) return;
+      const offset = drag.y - pointer.y;
+      if (!suppressClick && Math.abs(offset) <= 4) return;
+      if (!suppressClick) {
+        suppressClick = true;
+        canvas.setPointerCapture(event.pointerId);
+      }
+      drag.update(offset);
+    });
+    on(canvas, 'pointerup', () => { drag = null; });
+    on(canvas, 'lostpointercapture', () => { drag = null; });
+    on(canvas, 'pointerleave', () => {
+      pointer = null;
+      if (!suppressClick) drag = null;
+    });
+    on(canvas, 'click', event => {
+      if (suppressClick) {
+        suppressClick = false;
+        return;
+      }
+      const point = localPoint(event);
+      const part = screenHit(point);
+      if (part || selected) inspect(part, point);
+    });
+    on(document, 'keydown', event => {
+      if (event.key !== 'Escape' || dialog.open) return;
+      if (!controls.hidden) {
+        setControls(false);
+        controlsToggle.focus();
+      } else if (selected) resetWithFocus();
+    });
+
+    function draw(paint) {
+      const { ctx, width, height } = drawing.size();
+      const part = parts.find(item => item.id === selected);
+      const zoom = part?.zoom || 1;
+      const targetX = part ? clamp(width / 2 - zoom * (part.x + (selectedOffset?.x || 0)), width * (1 - zoom), 0) : 0;
+      const targetY = part ? clamp(height / 2 - zoom * (part.y + (selectedOffset?.y || 0)), height * (1 - zoom), 0) : 0;
+      camera.zoom = ease(camera.zoom, zoom, delta);
+      camera.x = ease(camera.x, targetX, delta);
+      camera.y = ease(camera.y, targetY, delta);
+      camera.x = clamp(camera.x, width * (1 - camera.zoom), 0);
+      camera.y = clamp(camera.y, height * (1 - camera.zoom), 0);
+      ctx.save();
+      ctx.translate(camera.x, camera.y);
+      ctx.scale(camera.zoom, camera.zoom);
+      paint(ctx, width, height);
+      ctx.restore();
+
+      const hovered = screenHit(pointer);
+      canvas.classList.toggle('is-inspectable', Boolean(hovered));
+      tip.hidden = !hovered;
+      if (hovered) {
+        setText(tip, hovered.tip || hovered.title);
+        ctx.strokeStyle = topic.model === 'dna' ? '#0f4c5c' : topic.model === 'blackhole' ? '#fbc777' : '#9bdefa';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        const x = pointer.x;
+        const y = pointer.y;
+        ctx.arc(x, y, 9, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      const currentPart = parts.find(item => item.id === selected);
+      if (currentPart) setText(byId('inspection-value'), currentPart.value || '');
+    }
 
     const ui = {
-      canvas, on, reduced, ease, size: drawing.size,
-      point(event) {
-        const rect = canvas.getBoundingClientRect();
-        return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      reduced, ease, draw,
+      selected: () => selected,
+      reset() { if (selected) inspect(null); },
+      circle(x, y, radius) {
+        return (px, py) => {
+          const distance = Math.hypot(px - x, py - y) / radius;
+          return distance <= 1 ? distance : Infinity;
+        };
       },
-      tip(value) {
-        setText(tip, value);
-        tip.hidden = !value;
+      parts(items) {
+        parts = items;
+        const key = items.map(part => part.id).join(',');
+        if (key === optionsKey) return;
+        optionsKey = key;
+        const prompt = element('option', '', 'Inspect a part');
+        prompt.value = '';
+        inspector.replaceChildren(prompt, ...items.map(part => {
+          const option = element('option', '', part.option || part.title);
+          option.value = part.id;
+          return option;
+        }));
+        inspector.value = selected;
       },
+      primary(button) { byId('primary-action').append(button); },
       setStage(index) {
         if (activeChapter === index) return;
         activeChapter = index;
@@ -408,14 +605,10 @@
     let needsMeasure = true;
 
     function measure() {
-      const mobile = matchMedia('(max-width: 690px)').matches;
-      const stageBottom = stage.getBoundingClientRect().height +
-        document.querySelector('.topbar').offsetHeight;
-      const trigger = mobile ? Math.min(innerHeight * 0.84, stageBottom + 42) : innerHeight * 0.57;
-      const positions = chapterElements.map(node => {
-        const rect = node.firstElementChild.getBoundingClientRect();
-        return rect.top + (mobile ? 35 : rect.height / 2) - trigger;
-      });
+      const mobile = compactLayout.matches;
+      const viewportHeight = innerHeight;
+      const trigger = chapterElements[0].getBoundingClientRect().top + window.scrollY;
+      const positions = chapterElements.map(node => node.getBoundingClientRect().top - trigger);
       const marks = topic.scrollStops || positions.map((_, index) => index / (positions.length - 1));
       let left = positions.findIndex(value => value > 0) - 1;
       if (positions.every(value => value <= 0)) left = positions.length - 1;
@@ -424,6 +617,29 @@
       else target = marks[left] + (marks[left + 1] - marks[left]) *
         clamp(-positions[left] / (positions[left + 1] - positions[left] || 1));
       chapter = positions.reduce((closest, value, index) => Math.abs(value) < Math.abs(positions[closest]) ? index : closest, 0);
+      if (topic.model === 'blackhole') {
+        const threshold = mobile ? modelWindow.getBoundingClientRect().bottom + 54 : viewportHeight * 0.31;
+        const span = viewportHeight * (mobile ? 0.31 : 0.26);
+        const rects = chapterSlots.map(slot => slot.getBoundingClientRect());
+        chapterSlots.forEach((slot, index) => {
+          const rect = rects[index];
+          const distance = clamp((threshold - rect.top) / span);
+          const amount = reduced() ? 0 : distance ** 1.25;
+          const centerX = rect.left + rect.width / 2;
+          const centerY = rect.top + rect.height / 2;
+          const direction = index % 2 === 0 ? 1 : -1;
+          const x = (innerWidth / 2 - centerX) * amount;
+          const y = (viewportHeight / 2 - centerY) * amount - Math.sin(Math.PI * amount) * 46;
+          const rotation = direction * (amount * 82 + Math.sin(Math.PI * amount) * 18);
+          const width = (1 - amount) ** 1.05;
+          const height = (1 - amount) ** 0.8 * (1 + Math.sin(Math.PI * amount) * 0.72);
+          const card = slot.firstElementChild;
+          card.style.transform = amount ? 'translate(' + x + 'px,' + y + 'px) rotate(' + rotation +
+            'deg) skewX(' + direction * 22 * Math.sin(Math.PI * amount) + 'deg) scale(' + width + ',' + height + ')' : '';
+          slot.classList.toggle('is-pulling', amount > 0);
+          card.style.opacity = amount ? String(clamp((1 - amount) * 1.8)) : '';
+        });
+      }
       needsMeasure = false;
     }
 
@@ -446,13 +662,7 @@
       progress = ease(progress, target, dt);
       if (Math.abs(progress - target) < 0.0001) progress = target;
       if (topic.model !== 'dna') ui.setStage(chapter);
-      if (topic.model === 'blackhole' && !reduced()) {
-        chapterElements.forEach((node, index) => {
-          const pull = Math.max(0, 1 - Math.abs(index / (chapterElements.length - 1) - progress) * 3) * progress;
-          node.style.setProperty('--bend', (-pull * 10).toFixed(1) + 'px');
-          node.style.setProperty('--tilt', (-pull * 5).toFixed(1) + 'deg');
-        });
-      }
+      delta = dt;
       model.frame(dt, progress, chapter);
       raf = requestAnimationFrame(frame);
     }
@@ -475,7 +685,13 @@
         listenerScope.abort();
         drawing.dispose();
         model.dispose?.();
-        ui.tip('');
+        inspect(null);
+        setControls(false);
+        tip.hidden = true;
+        pointer = null;
+        canvas.classList.remove('is-inspectable');
+        inspector.replaceChildren();
+        byId('primary-action').replaceChildren();
         controls.replaceChildren();
       }
     };
@@ -506,9 +722,9 @@
 
     if (next) {
       setText(byId('topic-label'), next.title + ' · ' + next.tags);
-      setText(byId('exhibit-category'), next.subject + ' / ' + next.tags);
       setText(title, next.title);
-      setText(byId('exhibit-intro'), next.intro);
+      setText(byId('mobile-title'), next.title);
+      setText(byId('mobile-category'), next.subject);
       setText(byId('model-label'), next.label);
       setText(byId('model-hint'), next.hint);
       canvas.dataset.model = next.model;
@@ -522,9 +738,6 @@
     } else {
       document.title = 'MORPH — Experience how things work';
       search.value = '';
-      artwork.push(surface(byId('hero-art'), (ctx, width, height) => {
-        MorphBlackHole.render(ctx, width, height, { poster: true, time: 4.2, progress: 0.18 });
-      }));
       cards(byId('collection-cards'), topics);
       if (key === 'explore' || key === 'main') {
         requestAnimationFrame(() => byId(key).scrollIntoView());
@@ -535,20 +748,97 @@
     }
   }
 
-  function navigate(key) {
+  function commitLocation(key) {
     const url = new URL(location.href);
     url.hash = key;
     if (url.href !== location.href) history.pushState(null, '', url);
-    MorphAudio.playSelect();
-    if (!key && !activeTopic) {
-      window.scrollTo(0, 0);
+    if (!key && !activeTopic) window.scrollTo(0, 0);
+    else route({ focus: true });
+  }
+
+  function cancelFusion() {
+    if (!fusion) return;
+    fusion.animations.forEach(animation => animation.cancel());
+    fusion = null;
+    byId('fusion-seed').hidden = true;
+    document.body.classList.remove('is-fusing');
+  }
+
+  async function navigate(key) {
+    if (fusion) {
+      if (fusion.key === key) return;
+      cancelFusion();
+    }
+    if (!key || activeTopic || reduced()) {
+      MorphAudio.playSelect();
+      commitLocation(key);
       return;
     }
-    route({ focus: true });
+
+    window.scrollTo(0, 0);
+    closeSearch();
+    search.blur();
+    MorphAudio.playFusion();
+    document.body.classList.add('is-fusing');
+    const transition = { key, animations: [] };
+    fusion = transition;
+    const centerX = innerWidth / 2;
+    const centerY = innerHeight / 2;
+    const objects = [...home.querySelectorAll('.hero-title,.hero-tagline,.search-pill,.chips a')];
+    const bounds = objects.map(node => node.getBoundingClientRect());
+    transition.animations = objects.map((node, index) => {
+      const rect = bounds[index];
+      const isPill = node.classList.contains('search-pill');
+      const x = centerX - (rect.left + rect.width / 2);
+      const y = centerY - (rect.top + rect.height / 2);
+      const scales = isPill ? (78 / rect.width) + ',' + (18 / rect.height) : '.07,.07';
+      return node.animate([
+        { transform: 'translate(0,0) scale(1)', opacity: 1 },
+        { transform: 'translate(' + x + 'px,' + y + 'px) scale(' + scales + ')', opacity: isPill ? 1 : 0 }
+      ], { duration: 650, easing: motionCurve, fill: 'forwards' });
+    });
+    await Promise.allSettled(transition.animations.map(animation => animation.finished));
+    if (fusion !== transition) return;
+
+    const seed = byId('fusion-seed');
+    seed.hidden = false;
+    commitLocation(key);
+    const rect = modelWindow.getBoundingClientRect();
+    const startX = Math.max(0, (rect.width - 78) / 2);
+    const startY = Math.max(0, (rect.height - 18) / 2);
+    transition.animations.push(
+      modelWindow.animate([
+        { clipPath: 'inset(' + startY + 'px ' + startX + 'px round 40px)' },
+        { clipPath: 'inset(0px round 8px)' }
+      ], { duration: 680, easing: motionCurve }),
+      seed.animate([
+        { transform: 'scale(1)', opacity: 1 },
+        { transform: 'scale(1.45,2.4)', opacity: 0 }
+      ], { duration: 210, easing: motionCurve, fill: 'forwards' }),
+      stage.querySelector('.stage-dock').animate([{ opacity: 0 }, { opacity: 1 }],
+        { duration: 460, delay: 190, fill: 'backwards', easing: motionCurve })
+    );
+    await Promise.allSettled(transition.animations.map(animation => animation.finished));
+    if (fusion === transition) cancelFusion();
   }
 
   history.scrollRestoration = 'manual';
-  window.addEventListener('popstate', () => route());
-  window.addEventListener('hashchange', () => route());
+  function onHistory() {
+    cancelFusion();
+    route();
+  }
+  window.addEventListener('popstate', onHistory);
+  window.addEventListener('hashchange', onHistory);
+  window.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || !fusion) return;
+    cancelFusion();
+    if (!activeTopic) search.focus({ preventScroll: true });
+  });
+  media.addEventListener('change', () => {
+    if (!fusion || !reduced()) return;
+    const { key } = fusion;
+    cancelFusion();
+    commitLocation(key);
+  });
   route({ initial: true });
 })();
